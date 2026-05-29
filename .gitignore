@@ -58,5 +58,8 @@ htmlcov/
 # Docker volumes (if any)
 # data/
 
+# SQLite database (auto-generated at runtime)
+data/nba_local.db
+
 # Local Flask libraries (installed via pip)
 flask_lib/

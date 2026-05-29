@@ -25,6 +25,8 @@ from modules.nba_live_data import (
     compare_players
 )
 from modules.voice import text_to_speech
+from modules.local_answer import local_answer, can_answer_locally
+from modules.local_database import init_database
 import base64
 import tempfile
 
@@ -38,7 +40,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🏀 NBA智能助手 v2.1</title>
+    <title>🏀 NBA智能助手 v2.2</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -669,11 +671,26 @@ HTML_TEMPLATE = """
 """
 
 
+def _check_llm_available() -> bool:
+    try:
+        from modules.llm import check_llm_status
+        return check_llm_status()
+    except Exception:
+        api_key = getattr(config, 'DEEPSEEK_API_KEY', '')
+        return bool(api_key and api_key.startswith('sk-'))
+
+
 def handle_query(user_input: str) -> str:
     global CONVERSATION_HISTORY
     
     if len(CONVERSATION_HISTORY) > config.MAX_HISTORY * 2:
         CONVERSATION_HISTORY = CONVERSATION_HISTORY[-config.MAX_HISTORY * 2:]
+    
+    local_result = local_answer(user_input)
+    if local_result:
+        CONVERSATION_HISTORY.append(f"用户: {user_input}")
+        CONVERSATION_HISTORY.append(f"AI: {local_result}")
+        return local_result
     
     context = ""
     
@@ -740,6 +757,15 @@ def handle_query_stream(user_input: str):
     
     if len(CONVERSATION_HISTORY) > config.MAX_HISTORY * 2:
         CONVERSATION_HISTORY = CONVERSATION_HISTORY[-config.MAX_HISTORY * 2:]
+    
+    local_result = local_answer(user_input)
+    if local_result:
+        CONVERSATION_HISTORY.append(f"用户: {user_input}")
+        CONVERSATION_HISTORY.append(f"AI: {local_result}")
+        for char in local_result:
+            yield f"data: {json.dumps({'content': char}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'done': True})}\n\n"
+        return
     
     context = ""
     
@@ -882,13 +908,21 @@ def text_to_speech_endpoint():
 
 
 if __name__ == '__main__':
-    # 使用端口 8083（避免冲突）
+    init_database()
+    
     port = 8083
+    llm_available = _check_llm_available()
+    
     print("=" * 50)
-    print("🏀 NBA Web 助手 v2.1")
+    print("🏀 NBA Web 助手 v2.2")
     print(f"   模型：{config.LLM_PROVIDER}")
+    print(f"   LLM 服务：{'✅ 可用' if llm_available else '❌ 不可用（本地模式）'}")
+    print(f"   本地数据库：✅ 已加载")
     print(f"   实时数据：{'开启' if config.USE_LIVE_DATA else '关闭'}")
     print("=" * 50)
     print(f"🌐 访问地址：http://localhost:{port}")
+    if not llm_available:
+        print("💡 提示：当前为本地模式，基础问题可直接回答")
+        print("   配置API Key后可使用完整功能")
     print("=" * 50)
     app.run(host=config.WEB_HOST, port=port, debug=False, threaded=True)
