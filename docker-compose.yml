@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  nba-assistant:
+    build: .
+    container_name: nba-voice-assistant
+    ports:
+      - "5000:5000"
+    environment:
+      # LLM 提供商配置
+      - LLM_PROVIDER=${LLM_PROVIDER:-deepseek}
+      
+      # DeepSeek 配置
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+      - DEEPSEEK_URL=${DEEPSEEK_URL:-https://api.deepseek.com/chat/completions}
+      
+      # OpenAI 兼容配置
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-deepseek-ai/DeepSeek-V3}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.siliconflow.cn/v1}
+      
+      # Ollama 配置
+      - OLLAMA_URL=${OLLAMA_URL:-http://localhost:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:latest}
+      
+      # NBA API 配置
+      - NBA_API_KEY=${NBA_API_KEY:-}
+      - BALLDONTLIE_API_KEY=${BALLDONTLIE_API_KEY:-}
+    volumes:
+      # 可选：持久化临时文件
+      - ./temp:/app/temp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

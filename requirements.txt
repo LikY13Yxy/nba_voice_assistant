@@ -1,0 +1,21 @@
+# Web 框架
+flask>=3.0.0
+
+# 语音功能
+speechrecognition>=3.8.1
+edge-tts>=6.1.12
+pygame>=2.5.0
+
+# NBA 数据
+nba_api>=1.4.1
+
+# HTTP 请求
+requests>=2.31.0
+
+# 音频处理（可选）
+# pyaudio>=0.2.14  # 命令行语音输入需要
+# webrtcvad>=2.0.10  # 语音活动检测（可选）
+# noisereduce>=3.0.0  # 降噪（可选）
+
+# 数据处理（可选）
+# numpy>=1.24.0  # 音频处理需要
