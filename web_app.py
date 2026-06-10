@@ -81,6 +81,17 @@ HTML_TEMPLATE = """
         }
         .status-item.active { color: #4ade80; }
         .status-item.inactive { color: #f87171; }
+        .status-bar {
+            padding: 8px 16px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            text-align: center;
+            justify-content: center;
+        }
+        .status-ok { background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3); }
+        .status-warn { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
+        .status-error { background: rgba(248, 113, 113, 0.15); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); }
         .chat-container {
             background: rgba(255,255,255,0.1);
             border-radius: 15px;
@@ -282,6 +293,8 @@ HTML_TEMPLATE = """
             </span>
         </div>
         
+        <div id="serviceStatus" class="status-bar" style="display:none;"></div>
+        
         <div class="chat-container" id="chat">
             <div class="message ai-message">
                 👋 你好！我是NBA智能助手，可以帮你查询：
@@ -323,6 +336,37 @@ HTML_TEMPLATE = """
     
     <script>
         let isStreaming = false;
+        let isServiceOnline = false;
+        
+        // Check backend service health on page load
+        async function checkServiceHealth() {
+            try {
+                const response = await fetch('/health');
+                if (response.ok) {
+                    const data = await response.json();
+                    isServiceOnline = true;
+                    const statusEl = document.getElementById('serviceStatus');
+                    if (statusEl) {
+                        statusEl.style.display = 'flex';
+                        statusEl.innerHTML = data.llm_available 
+                            ? '✅ 服务正常 | 模型: ' + data.llm_provider
+                            : '⚠️ LLM 不可用（本地模式）| 模型: ' + data.llm_provider;
+                        statusEl.className = data.llm_available ? 'status-bar status-ok' : 'status-bar status-warn';
+                    }
+                }
+            } catch (e) {
+                isServiceOnline = false;
+                const statusEl = document.getElementById('serviceStatus');
+                if (statusEl) {
+                    statusEl.style.display = 'flex';
+                    statusEl.innerHTML = '❌ 后端服务未连接，请运行 python web_app.py 启动服务';
+                    statusEl.className = 'status-bar status-error';
+                }
+            }
+        }
+        
+        // Run health check when page loads
+        window.addEventListener('DOMContentLoaded', checkServiceHealth);
         
         function handleKeyPress(e) {
             if (e.key === 'Enter' && !isStreaming) sendMessage();
@@ -411,7 +455,11 @@ HTML_TEMPLATE = """
                 
             } catch (error) {
                 loadingDiv.remove();
-                chat.innerHTML += '<div class="message ai-message">抱歉，出现错误: ' + escapeHtml(error.toString()) + '</div>';
+                let errorMsg = error.toString();
+                if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+                    errorMsg = '❌ 无法连接后端服务，请确认 python web_app.py 正在运行';
+                }
+                chat.innerHTML += '<div class="message ai-message">抱歉，出现错误: ' + escapeHtml(errorMsg) + '</div>';
             }
             
             sendBtn.disabled = false;
@@ -667,7 +715,11 @@ HTML_TEMPLATE = """
                 
             } catch (error) {
                 loadingDiv.remove();
-                chat.innerHTML += '<div class="message ai-message">抱歉，出现错误: ' + escapeHtml(error.toString()) + '</div>';
+                let errorMsg = error.toString();
+                if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+                    errorMsg = '❌ 无法连接后端服务，请确认 python web_app.py 正在运行';
+                }
+                chat.innerHTML += '<div class="message ai-message">抱歉，出现错误: ' + escapeHtml(errorMsg) + '</div>';
             }
             
             sendBtn.disabled = false;
@@ -840,6 +892,18 @@ def home():
     return render_template_string(HTML_TEMPLATE)
 
 
+@app.route('/health')
+def health():
+    """Health check endpoint for frontend service detection"""
+    llm_ok = _check_llm_available()
+    return jsonify({
+        'status': 'ok',
+        'llm_available': llm_ok,
+        'llm_provider': config.LLM_PROVIDER,
+        'live_data': config.USE_LIVE_DATA
+    })
+
+
 @app.route('/chat', methods=['POST'])
 def chat_endpoint():
     data = request.json
@@ -931,6 +995,21 @@ if __name__ == '__main__':
     init_database()
     
     port = 8083
+    
+    # Validate API Key before starting
+    api_key = getattr(config, 'DEEPSEEK_API_KEY', '').strip()
+    if not api_key or len(api_key) < 10:
+        print("=" * 50)
+        print("❌ 错误：DEEPSEEK_API_KEY 未配置或无效")
+        print("=" * 50)
+        print("请通过以下方式之一配置 API Key：")
+        print("  1. 创建 .env 文件：cp .env.example .env")
+        print("  2. 编辑 .env 填入 DEEPSEEK_API_KEY=sk-xxx")
+        print("  3. 或设置环境变量：export DEEPSEEK_API_KEY=sk-xxx")
+        print("=" * 50)
+        print("⚠️  服务将以本地模式启动（仅本地数据库回答）")
+        print("=" * 50)
+    
     llm_available = _check_llm_available()
     
     print("=" * 50)
