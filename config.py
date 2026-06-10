@@ -12,7 +12,7 @@ class Config:
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "deepseek")  # 可选: deepseek, openai, ollama
     
     # DeepSeek 配置
-    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "sk-fc97b1cb8544469c8826c0c66b9412c2")
+    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", " ")
     DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")  # 可选: deepseek-chat, deepseek-reasoner
     DEEPSEEK_URL: str = os.getenv("DEEPSEEK_URL", "https://api.deepseek.com/chat/completions")
     
@@ -48,8 +48,10 @@ class Config:
     BALLDONTLIE_API_KEY: str = os.getenv("BALLDONTLIE_API_KEY", "")
     
     # 备用数据源
+    USE_ESPN: bool = True  # ESPN API (免费，无需Key)
     USE_BALLDONTLIE: bool = True  # 免费API
     USE_NBA_API: bool = True  # nba_api库
+    USE_THESPORTSDB: bool = True  # TheSportsDB (免费，无需Key)
     
     WAKE_WORD: str = "NBA"
     TTS_VOICE: str = "zh-CN-XiaoxiaoNeural"

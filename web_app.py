@@ -5,6 +5,7 @@ import json
 # 添加项目路径和 flask_lib 路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'flask_lib'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'libs'))
 
 from flask import Flask, render_template_string, request, jsonify, Response
 from config import config
@@ -553,6 +554,11 @@ HTML_TEMPLATE = """
                     body: JSON.stringify({text: text})
                 });
                 
+                if (!response.ok) {
+                    document.getElementById('voiceStatus').textContent = '❌ 语音服务请求失败';
+                    return;
+                }
+                
                 const data = await response.json();
                 
                 if (data.success && data.audio) {
@@ -568,14 +574,17 @@ HTML_TEMPLATE = """
                         currentAudio = null;
                     };
                     
-                    currentAudio.onerror = function() {
+                    currentAudio.onerror = function(e) {
+                        console.error('音频播放错误:', e);
                         document.getElementById('voiceStatus').textContent = '❌ 播放失败';
                         currentAudio = null;
                     };
                     
                     await currentAudio.play();
                 } else {
-                    document.getElementById('voiceStatus').textContent = '❌ 语音生成失败';
+                    const errMsg = data.error || '未知错误';
+                    console.error('TTS生成失败:', errMsg);
+                    document.getElementById('voiceStatus').textContent = '❌ 语音生成失败: ' + errMsg;
                 }
             } catch (error) {
                 console.error('TTS错误:', error);
@@ -871,12 +880,11 @@ def clear_history():
 
 @app.route('/tts', methods=['POST'])
 def text_to_speech_endpoint():
-    """文字转语音接口"""
     data = request.json
     text = data.get('text', '')
     
     if not text:
-        return jsonify({'error': 'No text provided'}), 400
+        return jsonify({'success': False, 'error': 'No text provided'}), 400
     
     try:
         import asyncio
@@ -895,7 +903,18 @@ def text_to_speech_endpoint():
             os.unlink(temp_file)
             return audio_data
         
-        audio_data = asyncio.run(generate_speech())
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, generate_speech())
+                    audio_data = future.result(timeout=30)
+            else:
+                audio_data = loop.run_until_complete(generate_speech())
+        except RuntimeError:
+            audio_data = asyncio.run(generate_speech())
+        
         audio_base64 = base64.b64encode(audio_data).decode('utf-8')
         
         return jsonify({
@@ -904,7 +923,8 @@ def text_to_speech_endpoint():
             'format': 'mp3'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"❌ TTS接口错误: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 200
 
 
 if __name__ == '__main__':

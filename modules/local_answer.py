@@ -66,6 +66,18 @@ def local_answer(user_input: str) -> Optional[str]:
     _ensure_db()
     q = user_input.strip()
 
+    answer = _try_live_games(q)
+    if answer:
+        return answer
+
+    answer = _try_live_standings(q)
+    if answer:
+        return answer
+
+    answer = _try_nba_news(q)
+    if answer:
+        return answer
+
     answer = _try_comparison(q)
     if answer:
         return answer
@@ -94,6 +106,72 @@ def local_answer(user_input: str) -> Optional[str]:
     if answer:
         return answer
 
+    return None
+
+
+def _try_live_games(q: str) -> Optional[str]:
+    game_keywords = ["比赛", "赛程", "对战", "vs", "对决"]
+    time_keywords = ["今日", "今天", "最近", "近期", "明天", "后天", "本周"]
+    
+    has_game_kw = any(kw in q for kw in game_keywords)
+    has_time_kw = any(kw in q for kw in time_keywords)
+    
+    if has_game_kw and has_time_kw:
+        try:
+            from modules.nba_live_data import get_today_games
+            result = get_today_games()
+            if result and "暂无" not in result and "失败" not in result:
+                return result
+        except Exception as e:
+            logger.warning(f"获取今日比赛失败: {e}")
+        
+        try:
+            from modules.nba_data import get_today_games as get_local_games
+            return get_local_games()
+        except Exception as e:
+            logger.warning(f"获取本地比赛数据失败: {e}")
+            return None
+    return None
+
+
+def _try_live_standings(q: str) -> Optional[str]:
+    if any(kw in q for kw in ["排名", "排行", "积分榜", "战绩"]):
+        try:
+            from modules.nba_live_data import get_standings
+            result = get_standings()
+            if result and "失败" not in result:
+                return result
+        except Exception as e:
+            logger.warning(f"获取排名失败: {e}")
+        
+        try:
+            from modules.nba_data import get_standings as get_local_standings
+            return get_local_standings()
+        except Exception as e:
+            logger.warning(f"获取本地排名数据失败: {e}")
+            return None
+    return None
+
+
+def _try_nba_news(q: str) -> Optional[str]:
+    if any(kw in q for kw in ["新闻", "资讯", "最新消息", "最新新闻", "NBA新闻", "头条"]):
+        try:
+            from modules.data_provider import data_provider
+            articles = data_provider.get_espn_news(limit=5)
+            if articles:
+                result = "📰 NBA最新新闻\n"
+                result += "=" * 40 + "\n"
+                for i, a in enumerate(articles[:5], 1):
+                    headline = a.get('headline', 'N/A')
+                    description = a.get('description', '')
+                    result += f"{i}. {headline}\n"
+                    if description:
+                        result += f"   {description[:100]}\n"
+                    result += "\n"
+                return result
+        except Exception as e:
+            logger.warning(f"获取NBA新闻失败: {e}")
+            return None
     return None
 
 
@@ -132,7 +210,7 @@ def _try_player_query(q: str) -> Optional[str]:
             result += f"  生涯总计：{stats['total_points']}分 {stats['total_rebounds']}板 {stats['total_assists']}助"
             if season:
                 latest = season[0]
-                result += f"\n\n📈 2024-25赛季：{latest['ppg']}分 {latest['rpg']}板 {latest['apg']}助 | 投篮{latest['fg_pct']}% | 三分{latest['three_pct']}%"
+                result += f"\n\n📈 {latest['season']}赛季：{latest['ppg']}分 {latest['rpg']}板 {latest['apg']}助 | 投篮{latest['fg_pct']}% | 三分{latest['three_pct']}%"
             return result
 
     if any(kw in q for kw in ["身高", "多高"]):
@@ -229,6 +307,17 @@ def _try_champion_query(q: str) -> Optional[str]:
             return result
         return f"未找到{year}年的冠军数据"
 
+    if any(kw in q for kw in ["本赛季", "今年", "当前", "最新"]):
+        champions = query_champions()
+        if champions:
+            c = champions[0]
+            result = f"🏆 {c['year']}年NBA总冠军：{c['champion']}\n"
+            result += f"  亚军：{c['runner_up']}\n"
+            result += f"  比分：{c['score']}\n"
+            result += f"  常规赛MVP：{c['mvp']}\n"
+            result += f"  总决赛MVP：{c['finals_mvp']}"
+            return result
+
     if any(kw in q for kw in ["历年", "历史", "最近", "近几", "列表"]):
         champions = query_champions()
         if champions:
@@ -261,6 +350,12 @@ def _try_mvp_query(q: str) -> Optional[str]:
             for m in mvps:
                 result += f"  {m['year']}年 {m['award_type']}（{m['team']}）\n"
             return result
+
+    if any(kw in q for kw in ["本赛季", "今年", "当前", "最新"]):
+        mvps = query_mvp()
+        if mvps:
+            m = mvps[0]
+            return f"🏅 {m['year']}年{m['award_type']}：{m['player']}（{m['team']}）"
 
     if any(kw in q for kw in ["历年", "历史", "最近", "列表"]):
         mvps = query_mvp()
@@ -295,6 +390,13 @@ def _try_record_query(q: str) -> Optional[str]:
     records = query_records(category)
     if not records:
         return None
+
+    is_who_question = any(kw in q for kw in ["是谁", "谁是", "谁", "哪个", "哪个人"])
+    is_asking_king = any(kw in q for kw in ["得分王", "篮板王", "助攻王", "抢断王", "盖帽王", "三分王"])
+
+    if is_asking_king and category and records:
+        first = records[0]
+        return f"🏆 NBA历史{category}王是{first['holder']}，{first['value']}"
 
     if category:
         result = f"📊 NBA{category}纪录：\n"

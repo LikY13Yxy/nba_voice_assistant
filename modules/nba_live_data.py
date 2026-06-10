@@ -23,9 +23,9 @@ try:
     from nba_api.stats.static import players, teams
     NBA_API_AVAILABLE = True
     logger.info("nba_api 库已加载，实时数据功能可用")
-except ImportError:
+except Exception:
     NBA_API_AVAILABLE = False
-    logger.warning("nba_api 库未安装，将使用本地静态数据。运行: pip install nba_api")
+    logger.warning("nba_api 库加载失败（可能是numpy版本不兼容），将使用本地静态数据")
 
 from config import TEAM_NAMES, config
 

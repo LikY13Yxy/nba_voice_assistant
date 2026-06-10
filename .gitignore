@@ -63,3 +63,4 @@ data/nba_local.db
 
 # Local Flask libraries (installed via pip)
 flask_lib/
+libs/
